@@ -12,7 +12,7 @@ use std::{
 use tokio::sync::Semaphore;
 use tracing::{error, info};
 
-const INSERT_BATCH_SIZE: u64 = 10_000_000;
+const INSERT_BATCH_SIZE: u64 = 1_000_000;
 
 pub struct StructuredMigration<'a> {
     pub db_name: &'a str,
@@ -83,7 +83,7 @@ ORDER BY (channel_id, user_id, timestamp)
         );
 
         let i = Arc::new(AtomicU64::new(1));
-        let semaphore = Arc::new(Semaphore::new(4));
+        let semaphore = Arc::new(Semaphore::new(2));
 
         let started_at = Instant::now();
 
@@ -133,8 +133,8 @@ async fn migrate_partition(
     let mut inserter = db
         .inserter(MESSAGES_STRUCTURED_TABLE)?
         .with_timeouts(
-            Some(Duration::from_secs(30)),
-            Some(Duration::from_secs(180)),
+            Some(Duration::from_secs(60)),
+            Some(Duration::from_secs(300)),
         )
         .with_max_rows(INSERT_BATCH_SIZE)
         .with_period(Some(Duration::from_secs(15)));
