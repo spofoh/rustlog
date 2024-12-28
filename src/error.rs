@@ -37,7 +37,6 @@ impl IntoResponse for Error {
                 StatusCode::INTERNAL_SERVER_ERROR
             }
             Error::ParseInt(_) | Error::InvalidParam(_) => StatusCode::BAD_REQUEST,
-            Error::ChannelOptedOut | Error::UserOptedOut => StatusCode::FORBIDDEN,
             Error::NotFound => StatusCode::NOT_FOUND,
         };
 

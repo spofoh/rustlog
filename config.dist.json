@@ -7,6 +7,5 @@
   "channels": ["12345"],
   "clientID": "id",
   "clientSecret": "secret",
-  "admins": [],
-  "optOut": {}
+  "admins": []
 }
