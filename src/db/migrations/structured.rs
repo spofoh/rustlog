@@ -152,7 +152,18 @@ async fn migrate_partition(
                 let msg: StructuredMessage<'static> = unsafe { std::mem::transmute(msg) };
                 inserter.write(&msg).context("Failed to write message")?;
 
-                let stats = inserter.commit().await.context("Could not commit")?;
+                let stats = match inserter.commit().await {
+                    Ok(stats) => {
+                        if stats.rows > 0 {
+                            info!("Successfully inserted {} messages from partition {partition}", stats.rows);
+                        }
+                        stats
+                    }
+                    Err(e) => {
+                        error!("Failed to commit batch for partition {partition}: {e}");
+                        return Err(anyhow::anyhow!("Commit failed for partition {partition}").into());
+                    }
+                };
                 if stats.rows > 0 {
                     info!(
                         "Inserted {} messages from partition {partition}",
