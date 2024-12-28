@@ -12,7 +12,7 @@ use std::{
 use tokio::sync::Semaphore;
 use tracing::{error, info};
 
-const INSERT_BATCH_SIZE: u64 = 1_000_000;
+const INSERT_BATCH_SIZE: u64 = 200_000;
 
 pub struct StructuredMigration<'a> {
     pub db_name: &'a str,
@@ -60,12 +60,12 @@ ORDER BY (channel_id, user_id, timestamp)
         .execute()
         .await?;
 
-        let partitions = db
+        let partitions = db 
             .query("SELECT DISTINCT partition FROM system.parts WHERE database = ? AND table = 'message' ORDER BY partition ASC")
             .bind(self.db_name)
             .fetch_all::<String>()
             .await
-            .context("Could not fetch partition list")?;
+            .context("Failed to fetch partition list from the database")?;    
 
         if partitions.len() > 1
             && env::var("RUSTLOG_ACKNOWLEDGE_STRUCTURE_MIGRATION").as_deref() != Ok("1")
@@ -142,15 +142,22 @@ async fn migrate_partition(
     let mut cursor = db
         .query("SELECT * FROM message WHERE toYYYYMM(timestamp) = ?")
         .bind(&partition)
-        .fetch::<UnstructuredMessage>()?;
-
+        .fetch::<UnstructuredMessage>()
+        .context(format!("Failed to fetch data for partition {partition}"))?;
+    
     while let Some(unstructured_msg) = cursor.next().await? {
         match StructuredMessage::from_unstructured(&unstructured_msg) {
             Ok(msg) => {
                 // This is safe because despite the function signature,
                 // `inserter.write` only uses the value for serialization at the time of the method call, and not later
                 let msg: StructuredMessage<'static> = unsafe { std::mem::transmute(msg) };
-                inserter.write(&msg).context("Failed to write message")?;
+                match inserter.write(&msg) {
+                    Ok(_) => {},
+                    Err(e) => {
+                        error!("Failed to write message to table: {e}, message: {msg:?}, partition: {partition}");
+                        return Err(anyhow::anyhow!("Failed to write message to table: {e}").into());
+                    }
+                }
 
                 let stats = match inserter.commit().await {
                     Ok(stats) => {
@@ -161,9 +168,9 @@ async fn migrate_partition(
                     }
                     Err(e) => {
                         error!("Failed to commit batch for partition {partition}: {e}");
-                        return Err(anyhow::anyhow!("Commit failed for partition {partition}").into());
+                        return Err(anyhow::anyhow!("Commit failed for partition {partition}, error: {e}").into());
                     }
-                };
+                };                
                 if stats.rows > 0 {
                     info!(
                         "Inserted {} messages from partition {partition}",
