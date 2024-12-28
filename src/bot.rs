@@ -205,10 +205,6 @@ impl Bot {
                 .unwrap_or_else(|| Utc::now().timestamp_millis().try_into().unwrap());
             let user_id = maybe_user_id.unwrap_or_default().to_owned();
 
-            if self.app.config.opt_out.contains_key(&user_id) {
-                return Ok(());
-            }
-
             let raw_irc = irc_message.as_raw_irc();
             let unstructured = UnstructuredMessage {
                 channel_id,
@@ -252,36 +248,11 @@ impl Bot {
                     self.update_channels(client, &args, ChannelAction::Part)
                         .await?
                 }
-                "optout" => {
-                    self.optout_user(&args, sender_login, sender_id).await?;
-                }
                 _ => (),
             }
         }
 
         Ok(())
-    }
-
-    async fn optout_user(
-        &self,
-        args: &[&str],
-        sender_login: &str,
-        sender_id: &str,
-    ) -> anyhow::Result<()> {
-        let arg = args.first().context("No optout code provided")?;
-        if self.app.optout_codes.remove(*arg).is_some() {
-            self.app.optout_user(sender_id).await?;
-
-            Ok(())
-        } else if self.check_admin(sender_login).is_ok() {
-            let user_id = self.app.get_user_id_by_name(arg).await?;
-
-            self.app.optout_user(&user_id).await?;
-
-            Ok(())
-        } else {
-            Err(anyhow!("Invalid optout code"))
-        }
     }
 
     async fn update_channels<C: LoginCredentials>(

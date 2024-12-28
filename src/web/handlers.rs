@@ -25,7 +25,6 @@ use axum::{
 };
 use axum_extra::{headers::CacheControl, TypedHeader};
 use chrono::{DateTime, Days, Months, NaiveDate, NaiveTime, Utc};
-use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use std::time::Duration;
 use tracing::debug;
 
@@ -170,8 +169,7 @@ async fn get_channel_logs_inner(
     params: LogsParams,
     range: (DateTime<Utc>, DateTime<Utc>),
 ) -> Result<impl IntoApiResponse> {
-    app.check_opted_out(channel_id, None)?;
-
+    let stream = read_channel(&app.db, channel_id, params, &app.flush_buffer, range).await?;
     let stream = read_channel(&app.db, channel_id, params, &app.flush_buffer, range).await?;
 
     let logs = LogsResponse {
@@ -230,8 +228,6 @@ async fn get_user_logs(
         app.get_user_id_by_name(&user).await?
     };
 
-    app.check_opted_out(&channel_id, Some(&user_id))?;
-
     if let Some(range) = range_params.range() {
         let logs = get_user_logs_inner(&app, &channel_id, &user_id, logs_params, range).await?;
         Ok(logs.into_response())
@@ -283,8 +279,6 @@ async fn get_user_logs_by_date(
         }
         ChannelIdType::Id => user_logs_path.channel_info.channel.clone(),
     };
-
-    app.check_opted_out(&channel_id, Some(&user_id))?;
 
     let year = user_logs_path.year.parse()?;
     let month = user_logs_path.month.parse()?;
@@ -345,10 +339,8 @@ pub async fn list_available_logs(
             UserParam::UserId(id) => id,
             UserParam::User(name) => app.get_user_id_by_name(&name).await?,
         };
-        app.check_opted_out(&channel_id, Some(&user_id))?;
         read_available_user_logs(&app.db, &channel_id, &user_id).await?
     } else {
-        app.check_opted_out(&channel_id, None)?;
         read_available_channel_logs(&app.db, &channel_id).await?
     };
 
@@ -419,8 +411,6 @@ async fn random_user_line(
         ChannelIdType::Id => channel,
     };
 
-    app.check_opted_out(&channel_id, Some(&user_id))?;
-
     let random_line = read_random_user_line(&app.db, &channel_id, &user_id).await?;
     let stream = LogsStream::new_provided(vec![random_line])?;
 
@@ -467,8 +457,6 @@ async fn search_user_logs(
         ChannelIdType::Name => app.get_user_id_by_name(&channel).await?,
         ChannelIdType::Id => channel,
     };
-
-    app.check_opted_out(&channel_id, Some(&user_id))?;
 
     let stream = db::search_user_logs(
         &app.db,

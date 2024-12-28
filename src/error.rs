@@ -20,10 +20,6 @@ pub enum Error {
     Internal,
     #[error("Database error")]
     Clickhouse(#[from] clickhouse::error::Error),
-    #[error("The requested channel has opted out of being logged")]
-    ChannelOptedOut,
-    #[error("The requested user has opted out of being logged")]
-    UserOptedOut,
     #[error("Not found")]
     NotFound,
 }

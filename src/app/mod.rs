@@ -3,14 +3,13 @@ pub mod cache;
 use self::cache::UsersCache;
 use crate::{
     config::Config,
-    db::{delete_user_logs, writer::FlushBuffer},
+    db::{writer::FlushBuffer},
     error::Error,
     Result,
 };
-use anyhow::Context;
 use dashmap::DashSet;
 use std::{collections::HashMap, sync::Arc};
-use tracing::{debug, info};
+use tracing::debug;
 use twitch_api::{helix::users::GetUsersRequest, twitch_oauth2::AppAccessToken, HelixClient};
 
 #[derive(Clone)]
